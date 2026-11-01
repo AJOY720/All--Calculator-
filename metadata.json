@@ -1,0 +1,6 @@
+{
+  "name": "All Calculator",
+  "description": "All-in-one calculator featuring Daily Reward & Compound Interest, Standard Arithmetic, Exact Age & Birthday, and comprehensive Loan & EMI calculators with Bengali & English support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

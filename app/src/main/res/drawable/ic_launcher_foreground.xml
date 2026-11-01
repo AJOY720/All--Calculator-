@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Base chart bars -->
+    <path
+        android:fillColor="#80FFFFFF"
+        android:pathData="M30,68h8v12h-8z M44,56h8v24h-8z M58,46h8v34h-8z M72,36h8v44h-8z" />
+    <!-- Compounding growth trend line -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M28,70 L46,55 L60,45 L77,32" />
+    <!-- Arrowhead at trend line peak -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M70,30 L80,31 L78,41 Z" />
+    <!-- Coin / Star Accent -->
+    <path
+        android:fillColor="#FFD700"
+        android:pathData="M44,38 A7,7 0 1,0 44,37.99 Z" />
+    <!-- Percent sign on gold coin -->
+    <path
+        android:fillColor="#123B72"
+        android:pathData="M42.5,35.5 A1,1 0 1,1 42.5,35.49 M45.5,40.5 A1,1 0 1,1 45.5,40.49 M46,35 L42,41"
+        android:strokeColor="#123B72"
+        android:strokeWidth="0.8"
+        android:strokeLineCap="round" />
+</vector>
