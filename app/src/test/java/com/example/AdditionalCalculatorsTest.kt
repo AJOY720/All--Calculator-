@@ -234,5 +234,45 @@ class AdditionalCalculatorsTest {
     assertTrue(prep.interestSaved > 0)
     assertTrue(prep.newMonths < prep.originalMonths)
   }
+
+  @Test
+  fun testUserChainedAdditionAndRunningEvaluation() {
+    val expr = "150 + 250 + 365 + 365 + 69 + 6980 + 1550 + 100 + 200 + 300 + 900 + 1500"
+    val res = StandardCalculatorEngine.evaluate(expr)
+    assertTrue(res.isSuccess)
+    assertEquals(12729.0, res.getOrThrow(), 0.001)
+
+    // Expression with trailing whitespace and newline
+    val exprWithSpace = "$expr \n"
+    val runningRes = StandardCalculatorEngine.evaluateRunning(exprWithSpace)
+    assertTrue(runningRes.isSuccess)
+    assertEquals(12729.0, runningRes.getOrThrow(), 0.001)
+
+    // Expression with trailing operator "150 + 250 + 365 + "
+    val partialExpr = "150 + 250 + 365 + "
+    val partialRes = StandardCalculatorEngine.evaluateRunning(partialExpr)
+    assertTrue(partialRes.isSuccess)
+    assertEquals(765.0, partialRes.getOrThrow(), 0.001)
+
+    // Formatted display
+    val formatted = StandardCalculatorEngine.formatDisplay(12729.0)
+    assertEquals("12,729", formatted)
+    val bnDigits = StandardCalculatorEngine.toBengaliDigits(formatted)
+    assertEquals("১২,৭২৯", bnDigits)
+
+    // Amount in words
+    val words = StandardCalculatorEngine.amountInWordsBengali(12729.0)
+    assertTrue(words.contains("বারো হাজার"))
+    assertTrue(words.contains("সাত") && words.contains("শত"))
+    assertTrue(words.contains("ঊনত্রিশ"))
+
+    // Stats
+    val stats = StandardCalculatorEngine.calculateStats(expr)
+    assertTrue(stats != null)
+    assertEquals(12, stats!!.count)
+    assertEquals(12729.0, stats.sum, 0.001)
+    assertEquals(69.0, stats.min, 0.001)
+    assertEquals(6980.0, stats.max, 0.001)
+  }
 }
 

@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
+import com.example.data.calculator.ExpressionStats
 import com.example.data.calculator.StandardCalculatorEngine
 import com.example.data.local.NormalCalcHistoryRepository
 import com.example.data.model.AppLanguage
@@ -42,12 +43,18 @@ data class NumberToken(
 data class NormalCalcUiState(
   val expression: String = "",
   val cursorPosition: Int = 0,
-  val resultPreview: String = "",
+  val resultPreview: String = "",         // e.g. "12,729"
+  val runningSumBengali: String = "",     // e.g. "১২,৭২৯"
+  val amountInWords: String = "",         // e.g. "বারো হাজার সাতশত ঊনত্রিশ টাকা"
+  val isCalculated: Boolean = false,      // true when '=' was pressed
+  val stats: ExpressionStats? = null,
   val history: List<NormalCalcHistoryItem> = emptyList(),
   val selectedFilter: HistoryFilterPeriod = HistoryFilterPeriod.ALL,
   val historySearchQuery: String = "",
   val isScientific: Boolean = false,
   val isFullScreenHistoryOpen: Boolean = false,
+  val isItemizedListOpen: Boolean = false,
+  val isStatsDialogOpen: Boolean = false,
   val editingToken: NumberToken? = null,
   val errorMessage: String? = null
 ) {
@@ -93,7 +100,7 @@ data class NormalCalcUiState(
     fun parseNumberTokens(expr: String): List<NumberToken> {
       if (expr.isBlank()) return emptyList()
       val tokens = mutableListOf<NumberToken>()
-      val regex = Regex("""[0-9]+(?:\.[0-9]+)?""")
+      val regex = Regex("""[0-9০-৯]+(?:\.[0-9০-৯]+)?""")
       var count = 1
       for (match in regex.findAll(expr)) {
         tokens.add(
@@ -139,6 +146,22 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
     _uiState.value = _uiState.value.copy(isFullScreenHistoryOpen = !_uiState.value.isFullScreenHistoryOpen)
   }
 
+  fun openItemizedList() {
+    _uiState.value = _uiState.value.copy(isItemizedListOpen = true)
+  }
+
+  fun closeItemizedList() {
+    _uiState.value = _uiState.value.copy(isItemizedListOpen = false)
+  }
+
+  fun openStatsDialog() {
+    _uiState.value = _uiState.value.copy(isStatsDialogOpen = true)
+  }
+
+  fun closeStatsDialog() {
+    _uiState.value = _uiState.value.copy(isStatsDialogOpen = false)
+  }
+
   fun openTokenEditor(token: NumberToken) {
     _uiState.value = _uiState.value.copy(
       editingToken = token,
@@ -156,7 +179,7 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
    */
   fun updateTokenValue(token: NumberToken, newValue: String) {
     val current = _uiState.value.expression
-    val cleanNew = newValue.trim().filter { it.isDigit() || it == '.' }
+    val cleanNew = newValue.trim().filter { it.isDigit() || it in '০'..'৯' || it == '.' }
     if (cleanNew.isBlank()) {
       dismissTokenEditor()
       return
@@ -170,14 +193,12 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
       updated = current.substring(0, token.startIndex) + cleanNew + current.substring(token.endIndex)
       newCursor = token.startIndex + cleanNew.length
     } else {
-      // Re-scan matching token by ID
       val tokens = NormalCalcUiState.parseNumberTokens(current)
       val matching = tokens.find { it.id == token.id }
       if (matching != null) {
         updated = current.substring(0, matching.startIndex) + cleanNew + current.substring(matching.endIndex)
         newCursor = matching.startIndex + cleanNew.length
       } else {
-        // Fallback: replace first occurrence
         updated = current.replaceFirst(token.value, cleanNew)
         newCursor = updated.length
       }
@@ -187,9 +208,38 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
       expression = updated,
       cursorPosition = newCursor.coerceIn(0, updated.length),
       editingToken = null,
+      isCalculated = false,
       errorMessage = null
     )
     updatePreview(updated)
+  }
+
+  /**
+   * Removes a specific item by index from the chained list.
+   */
+  fun removeItemToken(token: NumberToken) {
+    val current = _uiState.value.expression
+    val tokens = NormalCalcUiState.parseNumberTokens(current)
+    if (tokens.isEmpty()) return
+
+    // If only one token, clear
+    if (tokens.size == 1 && tokens[0].id == token.id) {
+      onClear()
+      return
+    }
+
+    // Reconstruct without this token
+    val remainingValues = tokens.filterNot { it.id == token.id }.map { it.value }
+    val newExpr = remainingValues.joinToString(" + ")
+
+    _uiState.value = _uiState.value.copy(
+      expression = newExpr,
+      cursorPosition = newExpr.length,
+      editingToken = null,
+      isCalculated = false,
+      errorMessage = null
+    )
+    updatePreview(newExpr)
   }
 
   // --- Interactive Cursor Navigation & Direct Editing ---
@@ -228,6 +278,7 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
     _uiState.value = _uiState.value.copy(
       expression = newExpr,
       cursorPosition = newCursor.coerceIn(0, newExpr.length),
+      isCalculated = false,
       errorMessage = null
     )
     updatePreview(newExpr)
@@ -239,21 +290,31 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
     val current = _uiState.value.expression
     val pos = _uiState.value.cursorPosition.coerceIn(0, current.length)
 
-    val before = current.substring(0, pos)
-    val after = current.substring(pos)
+    // If user previously completed calculation and enters a digit, start fresh
+    val base = if (_uiState.value.isCalculated) {
+      _uiState.value = _uiState.value.copy(isCalculated = false)
+      ""
+    } else {
+      current
+    }
+    val effectivePos = if (base == "") 0 else pos.coerceIn(0, base.length)
+
+    val before = base.substring(0, effectivePos)
+    val after = base.substring(effectivePos)
 
     // Prevent multiple decimals in the same number chunk
     if (d == ".") {
-      val leftDigits = before.takeLastWhile { it.isDigit() || it == '.' }
-      val rightDigits = after.takeWhile { it.isDigit() || it == '.' }
+      val leftDigits = before.takeLastWhile { it.isDigit() || it in '০'..'৯' || it == '.' }
+      val rightDigits = after.takeWhile { it.isDigit() || it in '০'..'৯' || it == '.' }
       if (leftDigits.contains('.') || rightDigits.contains('.')) return
     }
 
     val updated = before + d + after
-    val newPos = pos + d.length
+    val newPos = effectivePos + d.length
     _uiState.value = _uiState.value.copy(
       expression = updated,
       cursorPosition = newPos,
+      isCalculated = false,
       errorMessage = null
     )
     updatePreview(updated)
@@ -261,17 +322,25 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
 
   fun onOperator(op: String) {
     val current = _uiState.value.expression
-    val pos = _uiState.value.cursorPosition.coerceIn(0, current.length)
 
-    if (current.isBlank()) {
+    // If calculation was completed, continue chain with the computed result!
+    val base = if (_uiState.value.isCalculated && _uiState.value.resultPreview.isNotBlank()) {
+      _uiState.value.resultPreview.replace(",", "")
+    } else {
+      current
+    }
+
+    val pos = if (_uiState.value.isCalculated) base.length else _uiState.value.cursorPosition.coerceIn(0, base.length)
+
+    if (base.isBlank()) {
       if (op == "−") {
-        _uiState.value = _uiState.value.copy(expression = "−", cursorPosition = 1)
+        _uiState.value = _uiState.value.copy(expression = "−", cursorPosition = 1, isCalculated = false)
       }
       return
     }
 
-    val before = current.substring(0, pos)
-    val after = current.substring(pos)
+    val before = base.substring(0, pos)
+    val after = base.substring(pos)
 
     val trimmedBefore = before.trimEnd()
     val updated: String
@@ -290,6 +359,7 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
     _uiState.value = _uiState.value.copy(
       expression = updated,
       cursorPosition = newPos.coerceIn(0, updated.length),
+      isCalculated = false,
       errorMessage = null
     )
     updatePreview(updated)
@@ -306,7 +376,7 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
 
     val insert = if (before.isEmpty() || before.last() in "+−×÷^( ") {
       "("
-    } else if (openCount > closeCount && (before.last().isDigit() || before.last() == ')')) {
+    } else if (openCount > closeCount && (before.last().isDigit() || before.last() in '০'..'৯' || before.last() == ')')) {
       ")"
     } else {
       " × ("
@@ -316,7 +386,8 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
     val newPos = pos + insert.length
     _uiState.value = _uiState.value.copy(
       expression = updated,
-      cursorPosition = newPos.coerceIn(0, updated.length)
+      cursorPosition = newPos.coerceIn(0, updated.length),
+      isCalculated = false
     )
     updatePreview(updated)
   }
@@ -337,7 +408,8 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
     val newPos = pos + insert.length
     _uiState.value = _uiState.value.copy(
       expression = updated,
-      cursorPosition = newPos.coerceIn(0, updated.length)
+      cursorPosition = newPos.coerceIn(0, updated.length),
+      isCalculated = false
     )
     updatePreview(updated)
   }
@@ -348,13 +420,14 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
     val before = current.substring(0, pos)
     val after = current.substring(pos)
 
-    if (before.isNotBlank() && (before.last().isDigit() || before.last() == ')')) {
+    if (before.isNotBlank() && (before.last().isDigit() || before.last() in '০'..'৯' || before.last() == ')')) {
       val insert = " ^ 2"
       val updated = before + insert + after
       val newPos = pos + insert.length
       _uiState.value = _uiState.value.copy(
         expression = updated,
-        cursorPosition = newPos.coerceIn(0, updated.length)
+        cursorPosition = newPos.coerceIn(0, updated.length),
+        isCalculated = false
       )
       updatePreview(updated)
     }
@@ -369,13 +442,14 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
     if (before.isNotBlank()) {
       val trimmed = before.trimEnd()
       if (trimmed.endsWith("%")) return
-      if (trimmed.last().isDigit() || trimmed.last() == ')' || trimmed.last() == '.') {
+      if (trimmed.last().isDigit() || trimmed.last() in '০'..'৯' || trimmed.last() == ')' || trimmed.last() == '.') {
         val insert = "%"
         val updated = trimmed + insert + after
         val newPos = trimmed.length + insert.length
         _uiState.value = _uiState.value.copy(
           expression = updated,
           cursorPosition = newPos.coerceIn(0, updated.length),
+          isCalculated = false,
           errorMessage = null
         )
         updatePreview(updated)
@@ -386,14 +460,16 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
   fun onNegate() {
     val current = _uiState.value.expression
     if (current.isNotBlank()) {
-      val evalRes = StandardCalculatorEngine.evaluate(current)
+      val evalRes = StandardCalculatorEngine.evaluateRunning(current)
       if (evalRes.isSuccess) {
         val neg = -evalRes.getOrThrow()
         val formatted = StandardCalculatorEngine.formatDisplay(neg)
         _uiState.value = _uiState.value.copy(
           expression = formatted,
           cursorPosition = formatted.length,
-          resultPreview = ""
+          resultPreview = formatted,
+          runningSumBengali = StandardCalculatorEngine.toBengaliDigits(formatted),
+          isCalculated = false
         )
       }
     }
@@ -407,7 +483,6 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
     val before = current.substring(0, pos)
     val after = current.substring(pos)
 
-    // Delete spaces and operators together if adjacent (e.g. " + ")
     val (newBefore, newPos) = if (before.endsWith(" ") && before.length >= 3 && before[before.length - 2] in "+−×÷^") {
       Pair(before.dropLast(3), pos - 3)
     } else {
@@ -418,6 +493,7 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
     _uiState.value = _uiState.value.copy(
       expression = updated,
       cursorPosition = newPos.coerceIn(0, updated.length),
+      isCalculated = false,
       errorMessage = null
     )
     updatePreview(updated)
@@ -441,6 +517,7 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
     _uiState.value = _uiState.value.copy(
       expression = updated,
       cursorPosition = pos.coerceIn(0, updated.length),
+      isCalculated = false,
       errorMessage = null
     )
     updatePreview(updated)
@@ -451,6 +528,10 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
       expression = "",
       cursorPosition = 0,
       resultPreview = "",
+      runningSumBengali = "",
+      amountInWords = "",
+      stats = null,
+      isCalculated = false,
       errorMessage = null
     )
   }
@@ -459,24 +540,45 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
     val current = _uiState.value.expression
     if (current.isBlank()) return
 
-    val evalRes = StandardCalculatorEngine.evaluate(current)
+    val evalRes = StandardCalculatorEngine.evaluateRunning(current)
     if (evalRes.isSuccess) {
       val resValue = evalRes.getOrThrow()
-      val formatted = StandardCalculatorEngine.formatDisplay(resValue)
-      val updatedHistory = historyRepository.addCalculation(expression = current, result = formatted)
+      val formattedEn = StandardCalculatorEngine.formatDisplay(resValue)
+      val formattedBn = StandardCalculatorEngine.toBengaliDigits(formattedEn)
+      val inWords = StandardCalculatorEngine.amountInWordsBengali(resValue)
+      val stats = StandardCalculatorEngine.calculateStats(current)
+
+      val updatedHistory = historyRepository.addCalculation(
+        expression = current.trim(),
+        result = formattedEn
+      )
 
       _uiState.value = _uiState.value.copy(
-        expression = formatted,
-        cursorPosition = formatted.length,
-        resultPreview = "",
+        resultPreview = formattedEn,
+        runningSumBengali = formattedBn,
+        amountInWords = inWords,
+        stats = stats,
+        isCalculated = true,
         history = updatedHistory,
         errorMessage = null
       )
     } else {
       _uiState.value = _uiState.value.copy(
-        errorMessage = evalRes.exceptionOrNull()?.message ?: "Error"
+        errorMessage = evalRes.exceptionOrNull()?.message ?: "হিসাবে ভুল আছে"
       )
     }
+  }
+
+  fun useResultAsNewExpression() {
+    val res = _uiState.value.resultPreview.replace(",", "")
+    if (res.isBlank()) return
+    _uiState.value = _uiState.value.copy(
+      expression = res,
+      cursorPosition = res.length,
+      isCalculated = false,
+      errorMessage = null
+    )
+    updatePreview(res)
   }
 
   fun onSelectHistory(item: NormalCalcHistoryItem) {
@@ -484,27 +586,34 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
       expression = item.expression,
       cursorPosition = item.expression.length,
       resultPreview = item.result,
+      runningSumBengali = StandardCalculatorEngine.toBengaliDigits(item.result),
       isFullScreenHistoryOpen = false,
+      isCalculated = true,
       errorMessage = null
     )
+    updatePreview(item.expression)
   }
 
   fun loadHistoryExpression(item: NormalCalcHistoryItem) {
     _uiState.value = _uiState.value.copy(
       expression = item.expression,
       cursorPosition = item.expression.length,
-      resultPreview = item.result,
       isFullScreenHistoryOpen = false,
+      isCalculated = false,
       errorMessage = null
     )
+    updatePreview(item.expression)
   }
 
   fun loadHistoryResult(item: NormalCalcHistoryItem) {
+    val clean = item.result.replace(",", "")
     _uiState.value = _uiState.value.copy(
-      expression = item.result,
-      cursorPosition = item.result.length,
-      resultPreview = "",
+      expression = clean,
+      cursorPosition = clean.length,
+      resultPreview = item.result,
+      runningSumBengali = StandardCalculatorEngine.toBengaliDigits(item.result),
       isFullScreenHistoryOpen = false,
+      isCalculated = false,
       errorMessage = null
     )
   }
@@ -530,6 +639,38 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
     val clip = ClipData.newPlainText("Calculator Text", text)
     clipboard.setPrimaryClip(clip)
     Toast.makeText(getApplication(), toastMessage, Toast.LENGTH_SHORT).show()
+  }
+
+  fun copyReceiptText(language: AppLanguage) {
+    val state = _uiState.value
+    val isBn = language == AppLanguage.BENGALI
+    val tokens = state.numberTokens
+    if (tokens.isEmpty()) return
+
+    val sb = StringBuilder()
+    sb.append(if (isBn) "🧾 বাংলা ক্যালকুলেটর হিসাবের রসিদ:\n" else "🧾 Calculation Receipt:\n")
+    sb.append("-----------------------------\n")
+
+    var runningTotal = 0.0
+    for ((index, token) in tokens.withIndex()) {
+      val num = StandardCalculatorEngine.toEnglishDigits(token.value).toDoubleOrNull() ?: 0.0
+      runningTotal += num
+      val itemNumStr = if (isBn) StandardCalculatorEngine.toBengaliDigits("${index + 1}") else "${index + 1}"
+      val valStr = if (isBn) StandardCalculatorEngine.toBengaliDigits(token.value) else token.value
+      val runStr = if (isBn) StandardCalculatorEngine.toBengaliDigits(StandardCalculatorEngine.formatDisplay(runningTotal)) else StandardCalculatorEngine.formatDisplay(runningTotal)
+      sb.append("$itemNumStr. $valStr  (চলতি যোগফল: $runStr)\n")
+    }
+
+    sb.append("-----------------------------\n")
+    val totalCountStr = if (isBn) "${StandardCalculatorEngine.toBengaliDigits("${tokens.size}")} টি" else "${tokens.size}"
+    val sumStr = if (isBn) state.runningSumBengali else state.resultPreview
+    sb.append(if (isBn) "মোট সংখ্যা: $totalCountStr\n" else "Total Items: $totalCountStr\n")
+    sb.append(if (isBn) "মোট যোগফল: $sumStr (${state.resultPreview})\n" else "Total Sum: ${state.resultPreview}\n")
+    if (state.amountInWords.isNotBlank()) {
+      sb.append(if (isBn) "কথায়: ${state.amountInWords}\n" else "In Words: ${state.amountInWords}\n")
+    }
+
+    copyText(sb.toString(), if (isBn) "রসিদ ক্লিপবোর্ডে কপি করা হয়েছে!" else "Receipt copied to clipboard!")
   }
 
   fun loadSample50NumbersCalculation(addToCalculatorToo: Boolean = false) {
@@ -559,6 +700,7 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
       expression = if (addToCalculatorToo) expr else _uiState.value.expression,
       cursorPosition = if (addToCalculatorToo) expr.length else _uiState.value.cursorPosition,
       resultPreview = if (addToCalculatorToo) formattedSum else _uiState.value.resultPreview,
+      runningSumBengali = if (addToCalculatorToo) StandardCalculatorEngine.toBengaliDigits(formattedSum) else _uiState.value.runningSumBengali,
       errorMessage = null
     )
   }
@@ -582,29 +724,68 @@ class NormalCalculatorViewModel(application: Application) : AndroidViewModel(app
   }
 
   fun copyToClipboard(language: AppLanguage) {
-    val textToCopy = _uiState.value.expression.ifBlank { _uiState.value.resultPreview }
+    val state = _uiState.value
+    val textToCopy = when {
+      state.expression.isNotBlank() && state.resultPreview.isNotBlank() ->
+        "${state.expression} = ${state.resultPreview}"
+      state.expression.isNotBlank() -> state.expression
+      else -> state.resultPreview
+    }
     if (textToCopy.isBlank()) return
 
     val clipboard = getApplication<Application>().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     val clip = ClipData.newPlainText("Calculator Result", textToCopy)
     clipboard.setPrimaryClip(clip)
 
-    val msg = if (language == AppLanguage.BENGALI) "ক্লিপবোর্ডে কপি করা হয়েছে!" else "Copied to clipboard!"
+    val msg = if (language == AppLanguage.BENGALI) "হিসাব ও যোগফল কপি করা হয়েছে!" else "Calculation & Sum copied!"
     Toast.makeText(getApplication(), msg, Toast.LENGTH_SHORT).show()
   }
 
   private fun updatePreview(expr: String) {
-    if (expr.isBlank() || expr.last() in "+−×÷^( ") {
-      _uiState.value = _uiState.value.copy(resultPreview = "")
+    if (expr.isBlank()) {
+      _uiState.value = _uiState.value.copy(
+        resultPreview = "",
+        runningSumBengali = "",
+        amountInWords = "",
+        stats = null
+      )
       return
     }
-    val res = StandardCalculatorEngine.evaluate(expr)
+
+    val res = StandardCalculatorEngine.evaluateRunning(expr)
     if (res.isSuccess) {
+      val value = res.getOrThrow()
+      val formattedEn = StandardCalculatorEngine.formatDisplay(value)
+      val formattedBn = StandardCalculatorEngine.toBengaliDigits(formattedEn)
+      val inWords = StandardCalculatorEngine.amountInWordsBengali(value)
+      val stats = StandardCalculatorEngine.calculateStats(expr)
+
       _uiState.value = _uiState.value.copy(
-        resultPreview = StandardCalculatorEngine.formatDisplay(res.getOrThrow())
+        resultPreview = formattedEn,
+        runningSumBengali = formattedBn,
+        amountInWords = inWords,
+        stats = stats,
+        errorMessage = null
       )
     } else {
-      _uiState.value = _uiState.value.copy(resultPreview = "")
+      val stats = StandardCalculatorEngine.calculateStats(expr)
+      if (stats != null && stats.count > 0) {
+        val formattedEn = StandardCalculatorEngine.formatDisplay(stats.sum)
+        val formattedBn = StandardCalculatorEngine.toBengaliDigits(formattedEn)
+        _uiState.value = _uiState.value.copy(
+          resultPreview = formattedEn,
+          runningSumBengali = formattedBn,
+          amountInWords = StandardCalculatorEngine.amountInWordsBengali(stats.sum),
+          stats = stats
+        )
+      } else {
+        _uiState.value = _uiState.value.copy(
+          resultPreview = "",
+          runningSumBengali = "",
+          amountInWords = "",
+          stats = null
+        )
+      }
     }
   }
 }

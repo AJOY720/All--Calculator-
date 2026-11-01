@@ -25,13 +25,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Backspace
+import androidx.compose.material.icons.automirrored.filled.LastPage
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FirstPage
 import androidx.compose.material.icons.filled.Functions
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.LastPage
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -59,6 +64,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.calculator.StandardCalculatorEngine
 import com.example.data.model.AppLanguage
 import com.example.ui.theme.BrandAccentBlue
 import com.example.ui.theme.BrandLine
@@ -134,22 +140,38 @@ fun NormalCalculatorScreen(
           )
         )
 
-        // Multi-number count badge
-        if (numberCount >= 3) {
+        // Multi-number count badge - Tapping it opens itemized list
+        if (numberCount >= 2) {
           Spacer(modifier = Modifier.width(8.dp))
           Surface(
             shape = RoundedCornerShape(8.dp),
-            color = BrandAccentBlue.copy(alpha = 0.12f)
+            color = BrandAccentBlue.copy(alpha = 0.15f),
+            border = BorderStroke(0.8.dp, BrandAccentBlue.copy(alpha = 0.35f)),
+            modifier = Modifier
+              .clip(RoundedCornerShape(8.dp))
+              .clickable { viewModel.openItemizedList() }
+              .testTag("top_number_count_badge")
           ) {
-            Text(
-              text = if (isBn) "$numberCount টি সংখ্যা" else "$numberCount numbers",
-              style = MaterialTheme.typography.labelSmall.copy(
-                fontWeight = FontWeight.Bold,
-                color = BrandAccentBlue,
-                fontSize = 11.sp
-              ),
-              modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-            )
+            Row(
+              modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Icon(
+                imageVector = Icons.AutoMirrored.Filled.ReceiptLong,
+                contentDescription = null,
+                tint = BrandAccentBlue,
+                modifier = Modifier.size(13.dp)
+              )
+              Spacer(modifier = Modifier.width(4.dp))
+              Text(
+                text = if (isBn) "${StandardCalculatorEngine.toBengaliDigits("$numberCount")} টি সংখ্যা" else "$numberCount items",
+                style = MaterialTheme.typography.labelSmall.copy(
+                  fontWeight = FontWeight.Bold,
+                  color = BrandAccentBlue,
+                  fontSize = 11.sp
+                )
+              )
+            }
           }
         }
       }
@@ -241,7 +263,7 @@ fun NormalCalculatorScreen(
       Column(
         modifier = Modifier
           .fillMaxSize()
-          .padding(horizontal = 14.dp, vertical = 10.dp)
+          .padding(horizontal = 14.dp, vertical = 8.dp)
       ) {
         // Multi-line scrollable interactive expression box
         Box(
@@ -253,13 +275,13 @@ fun NormalCalculatorScreen(
         ) {
           val exprDisplay = state.expression.ifBlank { "0" }
           val fontSize = when {
-            exprDisplay.length <= 14 -> 30.sp
+            exprDisplay.length <= 14 -> 28.sp
             exprDisplay.length <= 35 -> 22.sp
             exprDisplay.length <= 80 -> 18.sp
-            else -> 16.sp
+            else -> 15.sp
           }
           val lineHeight = when {
-            exprDisplay.length <= 14 -> 36.sp
+            exprDisplay.length <= 14 -> 34.sp
             exprDisplay.length <= 35 -> 28.sp
             else -> 22.sp
           }
@@ -305,8 +327,7 @@ fun NormalCalculatorScreen(
           )
         }
 
-        // 2b. Chained Sequential Numbers Row (e.g. [150] + [230] + [300])
-        // If there are multiple numbers in sequence, show interactive chips so user can tap to edit any number!
+        // 2b. Chained Sequential Numbers Row (e.g. [#1: 150 ✎] + [#2: 250 ✎] + [#3: 365 ✎]...)
         if (state.numberTokens.size >= 2) {
           Spacer(modifier = Modifier.height(4.dp))
           Row(
@@ -342,7 +363,7 @@ fun NormalCalculatorScreen(
                   verticalAlignment = Alignment.CenterVertically
                 ) {
                   Text(
-                    text = "#${token.id}: ${token.value}",
+                    text = "#${if (isBn) StandardCalculatorEngine.toBengaliDigits("${token.id}") else "${token.id}"}: ${if (isBn) StandardCalculatorEngine.toBengaliDigits(token.value) else token.value}",
                     style = MaterialTheme.typography.labelSmall.copy(
                       fontWeight = FontWeight.Bold,
                       color = BrandAccentBlue,
@@ -361,78 +382,206 @@ fun NormalCalculatorScreen(
             }
           }
         }
+      }
+    }
 
-        Spacer(modifier = Modifier.height(4.dp))
-        HorizontalDivider(color = BrandLine.copy(alpha = 0.4f), thickness = 0.8.dp)
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // 2c. Live Preview Result & Bottom Row Actions
+    // 2c. DEDICATED, UNMISSABLE "মোট যোগফল" (TOTAL SUM) SECTION
+    // This solves the problem where the sum was missing or hidden!
+    Card(
+      shape = RoundedCornerShape(14.dp),
+      colors = CardDefaults.cardColors(
+        containerColor = if (state.isCalculated) BrandAccentBlue.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
+      ),
+      border = BorderStroke(
+        width = 1.dp,
+        color = if (state.isCalculated) BrandAccentBlue else BrandLine.copy(alpha = 0.6f)
+      ),
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(bottom = 6.dp)
+        .testTag("calc_total_sum_card")
+    ) {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(horizontal = 12.dp, vertical = 8.dp)
+      ) {
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.SpaceBetween,
           verticalAlignment = Alignment.CenterVertically
         ) {
+          // Left: Status badge & label
           Row(verticalAlignment = Alignment.CenterVertically) {
-            // Copy Button
-            IconButton(
-              onClick = { viewModel.copyToClipboard(language) },
-              modifier = Modifier.size(32.dp)
+            Surface(
+              shape = RoundedCornerShape(6.dp),
+              color = if (state.isCalculated) BrandAccentBlue else MaterialTheme.colorScheme.surface,
+              border = BorderStroke(0.6.dp, BrandLine.copy(alpha = 0.4f))
             ) {
-              Icon(
-                imageVector = Icons.Default.ContentCopy,
-                contentDescription = "Copy",
-                tint = BrandMuted,
-                modifier = Modifier.size(16.dp)
-              )
+              Row(
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                if (state.isCalculated) {
+                  Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(12.dp)
+                  )
+                  Spacer(modifier = Modifier.width(3.dp))
+                }
+                Text(
+                  text = when {
+                    state.isCalculated -> Strings.finalResultLabel(language)
+                    state.resultPreview.isNotBlank() -> Strings.totalSumLabel(language)
+                    else -> Strings.runningSumLabel(language)
+                  },
+                  style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    color = if (state.isCalculated) Color.White else BrandAccentBlue,
+                    fontSize = 11.sp
+                  )
+                )
+              }
             }
 
-            // Quick Full-Screen History Action Icon
-            IconButton(
-              onClick = { viewModel.openFullScreenHistory() },
-              modifier = Modifier.size(32.dp).testTag("display_history_button")
-            ) {
-              Icon(
-                imageVector = Icons.Default.History,
-                contentDescription = Strings.fullScreenHistoryTitle(language),
-                tint = BrandAccentBlue,
-                modifier = Modifier.size(16.dp)
-              )
+            if (state.numberTokens.size >= 2) {
+              Spacer(modifier = Modifier.width(6.dp))
+              // Button to open itemized receipt dialog
+              Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = BrandAccentBlue.copy(alpha = 0.12f),
+                modifier = Modifier
+                  .clip(RoundedCornerShape(6.dp))
+                  .clickable { viewModel.openItemizedList() }
+                  .testTag("open_receipt_button")
+              ) {
+                Row(
+                  modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                  verticalAlignment = Alignment.CenterVertically
+                ) {
+                  Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ReceiptLong,
+                    contentDescription = null,
+                    tint = BrandAccentBlue,
+                    modifier = Modifier.size(11.dp)
+                  )
+                  Spacer(modifier = Modifier.width(3.dp))
+                  Text(
+                    text = Strings.itemizedListButton(language),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                      fontWeight = FontWeight.Bold,
+                      color = BrandAccentBlue,
+                      fontSize = 10.5.sp
+                    )
+                  )
+                }
+              }
             }
           }
 
-          // Error or Live Preview Sum
+          // Right: Action Buttons (Copy, Use Result, New Calc)
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(
+              onClick = { viewModel.copyToClipboard(language) },
+              modifier = Modifier.size(28.dp).testTag("copy_sum_button")
+            ) {
+              Icon(
+                imageVector = Icons.Default.ContentCopy,
+                contentDescription = "Copy Sum",
+                tint = BrandMuted,
+                modifier = Modifier.size(15.dp)
+              )
+            }
+
+            if (state.isCalculated) {
+              IconButton(
+                onClick = { viewModel.useResultAsNewExpression() },
+                modifier = Modifier.size(28.dp).testTag("use_result_button")
+              ) {
+                Icon(
+                  imageVector = Icons.Default.RestartAlt,
+                  contentDescription = Strings.useResultButton(language),
+                  tint = BrandAccentBlue,
+                  modifier = Modifier.size(16.dp)
+                )
+              }
+            }
+          }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // Main Result Value Display: Prominent, Big, Bold, Glowing!
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.End,
+          verticalAlignment = Alignment.Bottom
+        ) {
           if (state.errorMessage != null) {
             Text(
               text = state.errorMessage ?: "",
               style = MaterialTheme.typography.bodyMedium.copy(
                 color = MaterialTheme.colorScheme.error,
                 fontWeight = FontWeight.Bold,
-                fontSize = 15.sp
+                fontSize = 16.sp
               )
             )
-          } else if (state.resultPreview.isNotBlank()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Text(
-                text = "= ",
-                style = MaterialTheme.typography.titleLarge.copy(
-                  color = BrandMuted,
-                  fontWeight = FontWeight.Medium,
-                  fontSize = 20.sp
-                )
+          } else {
+            val displaySum = when {
+              isBn && state.runningSumBengali.isNotBlank() -> state.runningSumBengali
+              state.resultPreview.isNotBlank() -> state.resultPreview
+              else -> if (isBn) "০" else "0"
+            }
+
+            Text(
+              text = "= ",
+              style = MaterialTheme.typography.titleLarge.copy(
+                color = BrandAccentBlue,
+                fontWeight = FontWeight.Bold,
+                fontSize = 24.sp
               )
+            )
+            Text(
+              text = displaySum,
+              style = MaterialTheme.typography.headlineMedium.copy(
+                color = if (state.isCalculated) BrandAccentBlue else MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 28.sp
+              ),
+              modifier = Modifier.testTag("calc_preview_result")
+            )
+
+            // If in Bengali mode, also show English digits in small font alongside
+            if (isBn && state.resultPreview.isNotBlank() && state.resultPreview != state.runningSumBengali) {
+              Spacer(modifier = Modifier.width(6.dp))
               Text(
-                text = state.resultPreview,
-                style = MaterialTheme.typography.headlineSmall.copy(
-                  color = BrandAccentBlue,
-                  fontWeight = FontWeight.Bold,
-                  fontSize = 24.sp
+                text = "(${state.resultPreview})",
+                style = MaterialTheme.typography.bodyMedium.copy(
+                  color = BrandMuted,
+                  fontSize = 13.sp,
+                  fontWeight = FontWeight.Medium
                 ),
-                modifier = Modifier.testTag("calc_preview_result")
+                modifier = Modifier.padding(bottom = 2.dp)
               )
             }
-          } else {
-            Spacer(modifier = Modifier.width(1.dp))
           }
+        }
+
+        // Amount in words (কথায়: ...)
+        if (state.amountInWords.isNotBlank() && state.errorMessage == null) {
+          Spacer(modifier = Modifier.height(2.dp))
+          Text(
+            text = "${Strings.amountInWordsLabel(language)} ${state.amountInWords}",
+            style = MaterialTheme.typography.bodySmall.copy(
+              color = BrandMuted,
+              fontSize = 11.5.sp,
+              fontWeight = FontWeight.Medium,
+              textAlign = TextAlign.End
+            ),
+            modifier = Modifier.fillMaxWidth()
+          )
         }
       }
     }
@@ -472,7 +621,8 @@ fun NormalCalculatorScreen(
 
         // Indicator showing position in equation
         Text(
-          text = if (isBn) "কার্সর: ${state.cursorPosition}/${state.expression.length}" else "Cursor: ${state.cursorPosition}/${state.expression.length}",
+          text = if (isBn) "কার্সর: ${StandardCalculatorEngine.toBengaliDigits("${state.cursorPosition}")}/${StandardCalculatorEngine.toBengaliDigits("${state.expression.length}")}"
+                 else "Cursor: ${state.cursorPosition}/${state.expression.length}",
           style = MaterialTheme.typography.labelSmall.copy(
             fontWeight = FontWeight.Bold,
             color = BrandMuted,
@@ -493,7 +643,7 @@ fun NormalCalculatorScreen(
           onClick = { viewModel.moveCursorToEnd() },
           modifier = Modifier.size(34.dp).testTag("cursor_end_button")
         ) {
-          Icon(Icons.Default.LastPage, contentDescription = "End", tint = BrandAccentBlue, modifier = Modifier.size(18.dp))
+          Icon(Icons.AutoMirrored.Filled.LastPage, contentDescription = "End", tint = BrandAccentBlue, modifier = Modifier.size(18.dp))
         }
 
         // Delete Forward (DEL)
@@ -636,7 +786,6 @@ fun NormalCalculatorScreen(
         CalcIconKeyButton(
           icon = Icons.AutoMirrored.Filled.Backspace,
           modifier = Modifier.weight(1f),
-          color = MaterialTheme.colorScheme.surfaceVariant,
           testTag = "calc_key_backspace",
           onClick = { viewModel.onBackspace() }
         )
@@ -651,7 +800,7 @@ fun NormalCalculatorScreen(
       }
     }
 
-    // Number Token Editor Dialog when tapping any number in the chained equation
+    // Number Token Editor Dialog when tapping any number chip in the chained equation
     if (state.editingToken != null) {
       NumberTokenEditorDialog(
         token = state.editingToken!!,
@@ -659,6 +808,28 @@ fun NormalCalculatorScreen(
         onDismiss = { viewModel.dismissTokenEditor() },
         onUpdateValue = { newVal ->
           viewModel.updateTokenValue(state.editingToken!!, newVal)
+        },
+        onDeleteToken = {
+          viewModel.removeItemToken(state.editingToken!!)
+        }
+      )
+    }
+
+    // New Itemized Tally & Receipt Dialog (Shows running sum for each item, edit/delete, stats)
+    if (state.isItemizedListOpen) {
+      ItemizedTallyDialog(
+        state = state,
+        language = language,
+        onDismiss = { viewModel.closeItemizedList() },
+        onEditToken = { token ->
+          viewModel.closeItemizedList()
+          viewModel.openTokenEditor(token)
+        },
+        onDeleteToken = { token ->
+          viewModel.removeItemToken(token)
+        },
+        onCopyReceipt = {
+          viewModel.copyReceiptText(language)
         }
       )
     }

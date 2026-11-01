@@ -57,7 +57,8 @@ fun NumberTokenEditorDialog(
   token: NumberToken,
   language: AppLanguage,
   onDismiss: () -> Unit,
-  onUpdateValue: (String) -> Unit
+  onUpdateValue: (String) -> Unit,
+  onDeleteToken: (() -> Unit)? = null
 ) {
   var editingValue by remember { mutableStateOf(token.value) }
   val isBn = language == AppLanguage.BENGALI
@@ -217,40 +218,56 @@ fun NumberTokenEditorDialog(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Action Buttons (Cancel / Update)
+        // Action Buttons (Delete / Cancel / Update)
         Row(
           modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.End,
+          horizontalArrangement = Arrangement.SpaceBetween,
           verticalAlignment = Alignment.CenterVertically
         ) {
-          TextButton(onClick = onDismiss) {
-            Text(
-              text = if (isBn) "বাতিল" else "Cancel",
-              style = MaterialTheme.typography.labelLarge.copy(color = BrandMuted)
-            )
+          if (onDeleteToken != null) {
+            TextButton(
+              onClick = onDeleteToken,
+              colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+            ) {
+              Text(
+                text = if (isBn) "মুছে ফেলুন" else "Delete",
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
+              )
+            }
+          } else {
+            Spacer(modifier = Modifier.width(1.dp))
           }
 
-          Spacer(modifier = Modifier.width(10.dp))
-
-          Button(
-            onClick = {
-              if (editingValue.isNotBlank()) {
-                onUpdateValue(editingValue)
-              }
-            },
-            colors = ButtonDefaults.buttonColors(containerColor = BrandAccentBlue),
-            shape = RoundedCornerShape(10.dp),
-            modifier = Modifier.testTag("number_token_update_button")
-          ) {
-            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-              text = Strings.updateNumberButton(language),
-              style = MaterialTheme.typography.labelLarge.copy(
-                fontWeight = FontWeight.Bold,
-                color = Color.White
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onDismiss) {
+              Text(
+                text = if (isBn) "বাতিল" else "Cancel",
+                style = MaterialTheme.typography.labelLarge.copy(color = BrandMuted)
               )
-            )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Button(
+              onClick = {
+                if (editingValue.isNotBlank()) {
+                  onUpdateValue(editingValue)
+                }
+              },
+              colors = ButtonDefaults.buttonColors(containerColor = BrandAccentBlue),
+              shape = RoundedCornerShape(10.dp),
+              modifier = Modifier.testTag("number_token_update_button")
+            ) {
+              Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(6.dp))
+              Text(
+                text = Strings.updateNumberButton(language),
+                style = MaterialTheme.typography.labelLarge.copy(
+                  fontWeight = FontWeight.Bold,
+                  color = Color.White
+                )
+              )
+            }
           }
         }
       }

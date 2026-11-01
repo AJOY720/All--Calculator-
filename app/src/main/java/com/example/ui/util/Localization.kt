@@ -742,5 +742,77 @@ object Strings {
     AppLanguage.BENGALI -> "ক্যালকুলেটরে ফিরুন"
     AppLanguage.ENGLISH -> "Back to Calculator"
   }
+
+  // Total Sum & Running Results
+  fun totalSumLabel(lang: AppLanguage) = when (lang) {
+    AppLanguage.BENGALI -> "মোট যোগফল"
+    AppLanguage.ENGLISH -> "Total Sum"
+  }
+
+  fun runningSumLabel(lang: AppLanguage) = when (lang) {
+    AppLanguage.BENGALI -> "চলতি যোগফল"
+    AppLanguage.ENGLISH -> "Running Sum"
+  }
+
+  fun finalResultLabel(lang: AppLanguage) = when (lang) {
+    AppLanguage.BENGALI -> "চূড়ান্ত ফলাফল"
+    AppLanguage.ENGLISH -> "Final Result"
+  }
+
+  fun amountInWordsLabel(lang: AppLanguage) = when (lang) {
+    AppLanguage.BENGALI -> "কথায়:"
+    AppLanguage.ENGLISH -> "In Words:"
+  }
+
+  fun itemizedListTitle(lang: AppLanguage) = when (lang) {
+    AppLanguage.BENGALI -> "হিসাবের পূর্ণাঙ্গ তালিকা ও রসিদ"
+    AppLanguage.ENGLISH -> "Itemized Tally & Receipt"
+  }
+
+  fun itemizedListButton(lang: AppLanguage) = when (lang) {
+    AppLanguage.BENGALI -> "রসিদ ও তালিকা"
+    AppLanguage.ENGLISH -> "Receipt & List"
+  }
+
+  fun statsButton(lang: AppLanguage) = when (lang) {
+    AppLanguage.BENGALI -> "পরিসংখ্যান"
+    AppLanguage.ENGLISH -> "Statistics"
+  }
+
+  fun statsTitle(lang: AppLanguage) = when (lang) {
+    AppLanguage.BENGALI -> "সংখ্যার সারসংক্ষেপ ও পরিসংখ্যান"
+    AppLanguage.ENGLISH -> "Summary & Statistics"
+  }
+
+  fun countLabel(lang: AppLanguage) = when (lang) {
+    AppLanguage.BENGALI -> "মোট সংখ্যা"
+    AppLanguage.ENGLISH -> "Total Items"
+  }
+
+  fun averageLabel(lang: AppLanguage) = when (lang) {
+    AppLanguage.BENGALI -> "গড় মান"
+    AppLanguage.ENGLISH -> "Average"
+  }
+
+  fun maxLabel(lang: AppLanguage) = when (lang) {
+    AppLanguage.BENGALI -> "সর্বোচ্চ"
+    AppLanguage.ENGLISH -> "Maximum"
+  }
+
+  fun minLabel(lang: AppLanguage) = when (lang) {
+    AppLanguage.BENGALI -> "সর্বনিম্ন"
+    AppLanguage.ENGLISH -> "Minimum"
+  }
+
+  fun copyReceiptButton(lang: AppLanguage) = when (lang) {
+    AppLanguage.BENGALI -> "সম্পূর্ণ রসিদ কপি করুন"
+    AppLanguage.ENGLISH -> "Copy Full Receipt"
+  }
+
+  fun startNewCalculation(lang: AppLanguage) = when (lang) {
+    AppLanguage.BENGALI -> "নতুন হিসাব শুরু করুন"
+    AppLanguage.ENGLISH -> "New Calculation"
+  }
 }
+
 
